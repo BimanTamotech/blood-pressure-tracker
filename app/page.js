@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import Header from "@/components/Header";
 import DateTimePicker from "@/components/DateTimePicker";
 import ImageUploader from "@/components/ImageUploader";
 import ReadingForm from "@/components/ReadingForm";
 import BPChart from "@/components/BPChart";
+import { getReadings, saveReading, downloadCSV, importCSV } from "@/lib/storage";
 
 const emptyValues = { systolic: null, diastolic: null, pulse: null };
 
@@ -32,21 +33,11 @@ export default function Home() {
   const [readings, setReadings] = useState([]);
   const [status, setStatus] = useState(null);
 
-  const fetchReadings = useCallback(async () => {
-    try {
-      const res = await fetch("/api/readings");
-      if (res.ok) {
-        const data = await res.json();
-        setReadings(data);
-      }
-    } catch {
-      // GitHub might not be configured yet
-    }
-  }, []);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
-    fetchReadings();
-  }, [fetchReadings]);
+    setReadings(getReadings());
+  }, []);
 
   async function extractFromImage(imageData) {
     const res = await fetch("/api/extract", {
@@ -95,7 +86,7 @@ export default function Home() {
     }
   }
 
-  async function handleSave() {
+  function handleSave() {
     setSaving(true);
     setStatus(null);
 
@@ -111,31 +102,38 @@ export default function Home() {
         right_pulse: rightValues.pulse,
       };
 
-      const res = await fetch("/api/readings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reading),
-      });
+      const updated = saveReading(reading);
+      setReadings(updated);
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to save");
-      }
-
-      setStatus({ type: "success", msg: "Reading saved successfully!" });
+      setStatus({ type: "success", msg: "Reading saved!" });
       setLeftImage(null);
       setRightImage(null);
       setLeftValues(emptyValues);
       setRightValues(emptyValues);
       setDate(todayStr());
       setTime(nowTimeStr());
-
-      await fetchReadings();
     } catch (err) {
       setStatus({ type: "error", msg: `Save error: ${err.message}` });
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleImportCSV(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const merged = importCSV(ev.target.result);
+        setReadings(merged);
+        setStatus({ type: "success", msg: `Imported ${merged.length} readings from CSV.` });
+      } catch (err) {
+        setStatus({ type: "error", msg: `Import error: ${err.message}` });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   }
 
   return (
@@ -210,10 +208,51 @@ export default function Home() {
         />
 
         <BPChart readings={readings} />
+
+        {/* CSV Export / Import */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-6">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Data Management
+          </h2>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={downloadCSV}
+              disabled={readings.length === 0}
+              className="flex-1 flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200
+                         disabled:opacity-40 disabled:cursor-not-allowed text-gray-700 font-medium
+                         py-2.5 px-4 rounded-lg transition-colors text-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              Export CSV
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200
+                         text-gray-700 font-medium py-2.5 px-4 rounded-lg transition-colors text-sm"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              Import CSV
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              onChange={handleImportCSV}
+              className="hidden"
+            />
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Data is stored in your browser. Export CSV to back up your readings.
+          </p>
+        </div>
       </main>
 
       <footer className="text-center text-xs text-gray-400 py-4">
-        Blood Pressure Tracker &middot; Data stored in GitHub
+        Blood Pressure Tracker &middot; Data stored locally in your browser
       </footer>
     </>
   );
