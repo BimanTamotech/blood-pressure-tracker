@@ -1,20 +1,26 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { compressImage } from "@/lib/imageUtils";
 
 export default function ImageUploader({ label, image, onImageChange }) {
   const fileInputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
+  const [compressing, setCompressing] = useState(false);
 
-  function handleFile(file) {
+  async function handleFile(file) {
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert("Image must be under 5MB");
-      return;
+    setCompressing(true);
+    try {
+      const compressed = await compressImage(file);
+      onImageChange(compressed);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (e) => onImageChange(e.target.result);
+      reader.readAsDataURL(file);
+    } finally {
+      setCompressing(false);
     }
-    const reader = new FileReader();
-    reader.onload = (e) => onImageChange(e.target.result);
-    reader.readAsDataURL(file);
   }
 
   function handleDrop(e) {
@@ -34,8 +40,16 @@ export default function ImageUploader({ label, image, onImageChange }) {
         {label}
       </h3>
 
-      {image ? (
-        <div className="relative group">
+      {compressing ? (
+        <div className="flex flex-col items-center justify-center h-48 md:h-56 rounded-xl border-2 border-gray-200 bg-gray-50">
+          <svg className="animate-spin h-8 w-8 text-gray-400 mb-2" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="text-xs text-gray-400">Processing...</p>
+        </div>
+      ) : image ? (
+        <div className="relative">
           <img
             src={image}
             alt={`${label} BP reading`}
@@ -44,8 +58,7 @@ export default function ImageUploader({ label, image, onImageChange }) {
           <button
             onClick={() => onImageChange(null)}
             className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7
-                       flex items-center justify-center text-sm hover:bg-black/80 transition
-                       opacity-0 group-hover:opacity-100"
+                       flex items-center justify-center text-sm hover:bg-black/80 transition"
             aria-label="Remove image"
           >
             &times;

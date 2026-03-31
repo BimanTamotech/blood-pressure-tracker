@@ -40,15 +40,24 @@ export default function Home() {
   }, []);
 
   async function extractFromImage(imageData) {
-    const res = await fetch("/api/extract", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: imageData }),
-    });
+    let res;
+    try {
+      res = await fetch("/api/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: imageData }),
+      });
+    } catch (fetchErr) {
+      throw new Error("Image too large to send. Please try a smaller image or use the camera from closer.");
+    }
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Extraction failed");
+      let errMsg = "Extraction failed";
+      try {
+        const err = await res.json();
+        errMsg = err.error || errMsg;
+      } catch { /* non-JSON error body */ }
+      throw new Error(errMsg);
     }
 
     return res.json();
