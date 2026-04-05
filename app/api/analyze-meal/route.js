@@ -19,7 +19,7 @@ export async function POST(request) {
     }
 
     let base64Data;
-    let detectedMime = "image/jpeg";
+    let detectedMime = "image/png";
 
     if (image.startsWith("data:")) {
       const commaIndex = image.indexOf(",");
